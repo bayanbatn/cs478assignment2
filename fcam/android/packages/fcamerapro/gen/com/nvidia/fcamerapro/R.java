@@ -12,6 +12,7 @@ public final class R {
         public static final int flash_mode_array=0x7f050001;
         public static final int output_format_array=0x7f050000;
         public static final int touch_action_array=0x7f050002;
+        public static final int viewer_mode_array=0x7f050003;
     }
     public static final class attr {
     }
@@ -38,34 +39,36 @@ public final class R {
         public static final int icon=0x7f020001;
     }
     public static final class id {
-        public static final int button_capture=0x7f090011;
+        public static final int button_capture=0x7f090012;
         public static final int camera_view=0x7f090000;
         public static final int cb_auto_exposure=0x7f090008;
         public static final int cb_auto_focus=0x7f090005;
         public static final int cb_auto_gain=0x7f09000b;
         public static final int cb_auto_wb=0x7f090002;
-        public static final int gallery_histogram=0x7f090018;
-        public static final int gallery_large_preview=0x7f09001b;
-        public static final int gallery_preview=0x7f090015;
-        public static final int histogram_view=0x7f090010;
-        public static final int image_gallery=0x7f09001a;
-        public static final int main_view=0x7f090012;
-        public static final int mi_delete=0x7f09001c;
+        public static final int gallery_histogram=0x7f090019;
+        public static final int gallery_large_preview=0x7f09001c;
+        public static final int gallery_preview=0x7f090016;
+        public static final int histogram_view=0x7f090011;
+        public static final int image_gallery=0x7f09001b;
+        public static final int main_view=0x7f090013;
+        public static final int mi_delete=0x7f09001d;
+        public static final int mi_merge=0x7f09001e;
         public static final int sb_exposure=0x7f090009;
         public static final int sb_focus=0x7f090006;
         public static final int sb_gain=0x7f09000c;
         public static final int sb_wb=0x7f090003;
-        public static final int spinner_flash_mode=0x7f09000e;
+        public static final int spinner_flash_mode=0x7f09000f;
         public static final int spinner_output_format=0x7f09000d;
-        public static final int spinner_touch_action=0x7f09000f;
-        public static final int stack_gallery=0x7f090019;
-        public static final int thumbnail_busy=0x7f090014;
-        public static final int thumbnail_image=0x7f090013;
+        public static final int spinner_touch_action=0x7f090010;
+        public static final int spinner_viewer_mode=0x7f09000e;
+        public static final int stack_gallery=0x7f09001a;
+        public static final int thumbnail_busy=0x7f090015;
+        public static final int thumbnail_image=0x7f090014;
         public static final int tv_exposure=0x7f090007;
         public static final int tv_focus=0x7f090004;
         public static final int tv_gain=0x7f09000a;
-        public static final int tv_gallery_info_label=0x7f090016;
-        public static final int tv_gallery_info_value=0x7f090017;
+        public static final int tv_gallery_info_label=0x7f090017;
+        public static final int tv_gallery_info_value=0x7f090018;
         public static final int tv_wb=0x7f090001;
     }
     public static final class layout {
@@ -94,8 +97,10 @@ public final class R {
         public static final int label_output_format=0x7f040004;
         public static final int label_preview_hint=0x7f040012;
         public static final int label_touch_action=0x7f040006;
+        public static final int label_viewer_mode=0x7f040014;
         public static final int label_wb=0x7f040007;
         public static final int menu_item_delete_stack=0x7f040003;
+        public static final int menu_item_merge_stack=0x7f040013;
         public static final int menu_mono_capture=0x7f040001;
         public static final int menu_viewer=0x7f040002;
     }

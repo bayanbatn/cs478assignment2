@@ -105,6 +105,19 @@ public final class ViewerFragment extends Fragment implements FCamInterfaceEvent
 		 * passing it the names of the two images in the currently selected
 		 * ImageStack.
 		 */
+		case R.id.mi_merge:
+			if (mImageStackManager.getStack(mSelectedStack).getImageCount() != 2)
+				return true;
+			FCamInterface iface = FCamInterface.GetInstance();
+			Image img1 = mImageStackManager.getStack(mSelectedStack).getImage(0);
+			Image img2 = mImageStackManager.getStack(mSelectedStack).getImage(1);
+			boolean img1FlashOn = img1.getInfo().split("\n")[4].equals("On");
+			boolean img2FlashOn = img2.getInfo().split("\n")[4].equals("On");
+			if (img1FlashOn && !img2FlashOn)
+				iface.enqueueMessageForFlashFusion(img1.getName(), img2.getName());
+			if (!img1FlashOn && img2FlashOn)
+				iface.enqueueMessageForFlashFusion(img2.getName(), img1.getName());
+			return true;
 		// TODO TODO TODO
 		// TODO TODO TODO
 		// TODO TODO TODO

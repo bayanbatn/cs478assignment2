@@ -347,7 +347,7 @@ JNIEXPORT void JNICALL Java_com_nvidia_fcamerapro_FCamInterface_enqueueMessageFo
 	 * Enqueue a new message that represents a request for global autofocus.
 	 */
 	int value;
-	LOG("MYFOCUS global focus request\n");
+	LOG("MYFOCUS face focus request\n");
 	sAppData->requestQueue.produce(ParamSetRequest(PARAM_AUTO_FOCUS_FACE, &value, 0));
 	// TODO TODO TODO
 }
@@ -357,6 +357,37 @@ JNIEXPORT void JNICALL Java_com_nvidia_fcamerapro_FCamInterface_enqueueMessageFo
  * this function will be quite different from the other JNI calls above. The assignment
  * webpage has many hints to help you figure out how to implement this section.
  */
+JNIEXPORT void JNICALL Java_com_nvidia_fcamerapro_FCamInterface_enqueueMessageForFlashFusion(JNIEnv *env, jobject thiz, jstring flashOnPath, jstring flashOffPath) {
+	/* [CS478]
+	 * Enqueue a new message that represents a request for global autofocus.
+	 */
+	int value;
+	LOG("MYFOCUS flash fusion request\n");
+	//sAppData->requestQueue.produce(ParamSetRequest(PARAM_AUTO_FOCUS_FACE, &value, 0));
+	const char *str1 = (const char *) env->GetStringUTFChars(flashOnPath, 0);
+	const char *str2 = (const char *) env->GetStringUTFChars(flashOffPath, 0);
+	LOG("MYFOCUS got path: %s\n", str1);
+	LOG("MYFOCUS got path: %s\n", str2);
+	ImageStack::Image imgFlashOn = ImageStack::FileJPG::load(str1);
+	ImageStack::Image imgFlashOff = ImageStack::FileJPG::load(str2);
+
+	ImageStack::JointBilateral::apply(imgFlashOff, imgFlashOn, 4.0f, 4.0f, 0.0f, 0.4f);
+
+	ImageSet *is = writer->newImageSet(); // writer is a global instance of AsyncImageWriter already defined
+	FCam::_Frame* f = new FCam::Tegra::_Frame;
+	f->image = FCam::Image(imgFlashOff.width, imgFlashOff.height, FCam::RGB24);
+	for (int y = 0; y < imgFlashOff.height; y++) {
+		for (int x = 0; x < imgFlashOff.width; x++) {
+			for (int c = 0; c < 3; c++) {
+				((unsigned char*)f->image(x, y))[c] = (unsigned char)(255 * imgFlashOff(x, y)[c] + 0.5f);
+			}
+		}
+	}
+
+	is->add(FileFormatDescriptor::EFormatJPEG, FCam::Frame(f));
+	writer->push(is);
+
+}
 // TODO TODO TODO
 // TODO TODO TODO
 // TODO TODO TODO

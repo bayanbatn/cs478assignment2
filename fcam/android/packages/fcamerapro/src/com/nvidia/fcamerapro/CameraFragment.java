@@ -35,7 +35,7 @@ public final class CameraFragment extends Fragment implements OnClickListener, O
 	private CheckBox mAutoWBCheckBox, mAutoFocusCheckBox, mAutoExposureCheckBox, mAutoGainCheckBox;
 	private SeekBar mWBSeekBar, mFocusSeekBar, mExposureSeekBar, mGainSeekBar;
 	private TextView mWbTextView, mFocusTextView, mExposureTextView, mGainTextView;
-	private Spinner mOutputFormatSpinner, mFlashModeSpinner, mTouchActionSpinner;
+	private Spinner mOutputFormatSpinner, mFlashModeSpinner, mTouchActionSpinner, mViewerModeSpinner;
 	/* [CS478] Assignment #2
 	 * Create an additional spinner reference to keep track of the viewfinder mode. 
 	 */
@@ -77,6 +77,12 @@ public final class CameraFragment extends Fragment implements OnClickListener, O
 		mOutputFormatSpinner.setAdapter(adapter);
 		mOutputFormatSpinner.setEnabled(false);
 
+		// Unpack the spinner for the view mode.
+		mViewerModeSpinner = (Spinner) mContentView.findViewById(R.id.spinner_viewer_mode);
+		adapter = ArrayAdapter.createFromResource(activity, R.array.viewer_mode_array, android.R.layout.simple_spinner_item);
+		adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+		mViewerModeSpinner.setAdapter(adapter);		
+		
 		// Unpack the spinner for the flash mode.
 		mFlashModeSpinner = (Spinner) mContentView.findViewById(R.id.spinner_flash_mode);
 		adapter = ArrayAdapter.createFromResource(activity, R.array.flash_mode_array, android.R.layout.simple_spinner_item);
@@ -196,6 +202,14 @@ public final class CameraFragment extends Fragment implements OnClickListener, O
     	// TODO TODO TODO 
     	// TODO TODO TODO 
     	// TODO TODO TODO 
+		switch (mViewerModeSpinner.getSelectedItemPosition()) {
+		case 0: // normal mode
+
+			break;
+		case 1: // zebra
+
+			break;				
+		}
     }
 
     public void onNothingSelected(AdapterView<?> parent) {
