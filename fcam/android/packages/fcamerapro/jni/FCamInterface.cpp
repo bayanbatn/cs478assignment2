@@ -434,7 +434,7 @@ static void *FCamAppThread(void *ptr) {
     sensor.attach(&lens);
     sensor.attach(&flash);
     MyAutoFocus autofocus(&lens);
-    MyFaceDetector faceDetector("/data/fcam/data.xml");
+    MyFaceDetector faceDetector("/data/fcam/face.xml");
 
     FCam::Image previewImage(PREVIEW_IMAGE_WIDTH, PREVIEW_IMAGE_HEIGHT, FCam::YUV420p);
     FCam::Tegra::Shot shot;
@@ -565,11 +565,13 @@ static void *FCamAppThread(void *ptr) {
 				 */
 			case PARAM_AUTO_FOCUS_LOCAL_REG:
 				//LOG("MYFOCUS local focus switch\n");
+				autofocus.state = AUTO_FOCUS_FOCUS;
 				autofocus.setRect(taskData[0], taskData[1]);
 				autofocus.startSweep();
 				break;
 			case PARAM_AUTO_FOCUS_GLOBAL:
 				//LOG("MYFOCUS global focus switch\n");
+				autofocus.state = AUTO_FOCUS_FOCUS;
 				autofocus.setRect(0, 0, PREVIEW_IMAGE_WIDTH, PREVIEW_IMAGE_HEIGHT);
 				autofocus.startSweep();
 				break;
@@ -581,6 +583,7 @@ static void *FCamAppThread(void *ptr) {
 				 */
 			case PARAM_AUTO_FOCUS_FACE:
 				LOG("MYFOCUS face focus switch\n");
+				autofocus.state = AUTO_FOCUS_FACE_DETECT;
 				//autofocus.startFaceDetect();
 				break;
 				// TODO TODO TODO
@@ -635,7 +638,7 @@ static void *FCamAppThread(void *ptr) {
             currentShot->preview.evaluated.wb = shot.whiteBalance;
 	    }
 
-	    if (false) {
+	    if (autofocus.state == AUTO_FOCUS_FACE_DETECT) {
 	    	std::vector<cv::Rect> facesFound = faceDetector.detectFace(frame.image());
 	    	for (unsigned int i = 0; i < facesFound.size(); i++) {
 	    		cv::Rect r = facesFound[i];
@@ -647,6 +650,14 @@ static void *FCamAppThread(void *ptr) {
 					frame.image()(r.x, r.y + y)[0] = 254u;
 					frame.image()(r.x + r.width, r.y + y)[0] = 254u;
 	    		}
+	    	}
+	    	if (facesFound.size() == 0)
+	    		autofocus.fdWait();
+	    	else
+	    	{
+	    		autofocus.fdDone();
+	    		autofocus.setRects(facesFound);
+	    		autofocus.startSweep();
 	    	}
 	    }
 	    /* [CS478] Assignment #2
@@ -671,8 +682,8 @@ static void *FCamAppThread(void *ptr) {
 	     * You should process the incoming frame for autofocus, if necessary.
 	     * Your autofocus (MyAutoFocus.h) has a function called update(...).
 	     */
-	    //LOG("MYFOCUS focusing check called: %d\n", autofocus.isFocusing());
-	    if(autofocus.isFocusing())
+
+	    if(autofocus.state == AUTO_FOCUS_FOCUS)
 	    {
 	    	autofocus.update(frame);
 	    	//LOG("MYFOCUS update called\n");

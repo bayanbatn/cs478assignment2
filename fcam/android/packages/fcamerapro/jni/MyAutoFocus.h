@@ -5,13 +5,23 @@
 #include <FCam/Tegra/Lens.h>
 #include <FCam/Base.h>
 #include <android/log.h>
+#include <vector>
+#include <opencv2/core/core.hpp>
 
-#define NUM_INTERVALS 23
-#define RECT_EDGE_LEN 70
-#define IMAGE_WIDTH 640
-#define IMAGE_HEIGHT 480
-#define FILTER_SIZE 5
-#define NUM_NIGHT_IMAGES 2
+#define NUM_INTERVALS 			23
+#define RECT_EDGE_LEN 			100
+#define IMAGE_WIDTH 			640
+#define IMAGE_HEIGHT 			480
+#define FILTER_SIZE 			5
+#define NUM_NIGHT_IMAGES 		2
+//Face Detect
+#define FD_MAX_FRAMES			3
+//Focus states
+#define AUTO_FOCUS_FACE_DETECT 	2
+#define AUTO_FOCUS_FOCUS 		1
+#define AUTO_FOCUS_WAIT 		0
+//Max number of areas to focus
+#define MAX_FOCUS_RECTS			15
 
 typedef unsigned char uchar;
 
@@ -19,6 +29,12 @@ typedef unsigned char uchar;
 static const float discreteDioptres[] = {0.2f, 0.25f, 0.33f, 0.5f, 1.0f, 1.11f, 1.25f, 1.42f, 1.66f, 2.0f,
 										 2.5f, 3.33f, 5.0f, 5.26f, 5.56f, 5.88f, 6.25f, 6.67f, 7.14f, 7.69f,
 										 8.33f, 9.09f, 10.0f};
+
+struct FocusContrast
+{
+	int bestContrast;
+	int bestFocus;
+};
 
 class MyAutoFocus : public FCam::Tegra::AutoFocus {
 public:
@@ -29,82 +45,89 @@ public:
     	   /* [CS478]
     	    * Do any initialization you need.
     	    */
-    	   night = false;
     	   for (int i = 0; i < NUM_INTERVALS; i++)
     		   sharpVals[i] = 0.0f;
-       }
-
-       bool isFocusing()
-       {
-    	   return focusing;
-       }
-
-       void setNightMode(bool isNight)
-       {
-    	   night = isNight;
-       }
-
-       /* Looks through contrast values, and picks the index with the highest contrast value.
-        * This index later is mapped to a focal length value
-        */
-       int findMaxIdx()
-       {
-    	   int max = -1;
-    	   int maxIdx = -1;
-
-    	   //Catch outliers for the first checkpoint
-    	   if ((sharpVals[0] * 0.6f) > sharpVals[1])
-    		   sharpVals[0] = sharpVals[1];
-
-    	   for (int i = 0; i < NUM_INTERVALS; i++)
+    	   state = AUTO_FOCUS_WAIT;
+    	   fdFrameCount = 0;
+    	   //Init rect counts
+		   FocusContrast fc;
+		   fc.bestContrast = 0;
+		   fc.bestFocus = 0;
+    	   for (int i = 0; i < MAX_FOCUS_RECTS; i++)
     	   {
-    		   if (sharpVals[i] > max)
-    		   {
-    			   max = sharpVals[i];
-    			   maxIdx = i;
-    		   }
+    		   rects.push_back(rect);
+			   rectsFC.push_back(fc);
     	   }
-    	   logArrayDump();
-    	   LOG("MYFOCUS max idx : %d\n", maxIdx);
-    	   return maxIdx;
+    	   numActiveRects = 0;
+
+       }
+
+       void fdWait()
+       {
+    	   fdFrameCount++;
+    	   if (fdFrameCount == FD_MAX_FRAMES)
+    	   {
+    		   state = AUTO_FOCUS_WAIT;
+    		   fdFrameCount = 0;
+    	   }
+       }
+
+       void fdDone()
+       {
+    	   fdFrameCount = 0;
+    	   state = AUTO_FOCUS_FOCUS;
+       }
+
+       /* Meet the world's most inefficient implementation of median calculation.
+        */
+       int findMedianIdx()
+       {
+    	   int medianPos = (numActiveRects + 1) / 2;
+		   int maxFocus = 0;
+
+    	   for (int i = 0; i < medianPos; i++)
+    	   {
+    		   maxFocus = 0;
+    		   int maxIdx = 0;
+    		   for (int j = 0; j < numActiveRects; j++)
+    		   {
+    			   if (maxFocus <= rectsFC[j].bestFocus)
+    			   {
+    				   maxFocus = rectsFC[j].bestFocus;
+    				   maxIdx = j;
+    			   }
+    		   }
+    		   rectsFC[maxIdx].bestFocus = -1;
+    	   }
+    	   LOG("MYFOCUS median idx: %d\n", maxFocus);
+    	   return maxFocus; //error
        }
 
        /* Sets focus region. For global, it's the entire frame */
        void setRect(int x, int y, int width = RECT_EDGE_LEN, int height = RECT_EDGE_LEN)
        {
-    	   rect.x = std::max(x - RECT_EDGE_LEN / 2, 0);
-    	   rect.y = std::max(y - RECT_EDGE_LEN / 2, 0);
-    	   rect.width = std::min(width + rect.x, IMAGE_WIDTH) - rect.x;
-    	   rect.height = std::min(height + rect.y, IMAGE_HEIGHT) - rect.y;
+    	   rects[0].x = x;
+    	   rects[0].y = y;
+    	   rects[0].width = width;
+    	   rects[0].height = height;
+		   rectsFC[0].bestFocus = -1;
+		   rectsFC[0].bestContrast = -1;
+    	   numActiveRects = 1;
     	   //logRectDump();
        }
 
-       /* Clear the stored region in preparation for the next focal length value
-        */
-       void clearNightRegion()
+       void setRects(std::vector<cv::Rect>& cv_rects)
        {
-    	   for(int i = 0; i < RECT_EDGE_LEN; i++)
+    	   for (int i = 0; i < cv_rects.size(); i++)
     	   {
-    		   for(int j = 0; j < RECT_EDGE_LEN; j++)
-    		   {
-    			   nightRegion[i][j] = 0;
-    		   }
+    		   rects[i].x = cv_rects[i].x;
+    		   rects[i].y = cv_rects[i].y;
+    		   rects[i].width = cv_rects[i].width;
+    		   rects[i].height = cv_rects[i].height;
+    		   rectsFC[i].bestFocus = -1;
+    		   rectsFC[i].bestContrast = -1;
     	   }
-       }
-
-       /* Store image region for night mode (stores multiple frame data) */
-       void saveImage(FCam::Image &image){
-
-    	   int highX = rect.x + rect.width;
-    	   int highY = rect.y + rect.height;
-    	   for(int x = rect.x; x < highX; x++)
-    	   {
-    		   for(int y = rect.y; y < highY; y++)
-    		   {
-    			   nightRegion[x-rect.x][y-rect.y] += *(image(x,y));
-    		   }
-    	   }
-    	   logNightRegionDump();
+    	   numActiveRects = cv_rects.size();
        }
 
        /* Beging focusing */
@@ -115,24 +138,20 @@ public:
     	    * Before you do that, do basic checks, e.g. is the autofocus
     	    * already engaged?
     	    */
-    	   if (focusing) return;
-    	   if (night)
-    		   clearNightRegion();
+    	   if (state != AUTO_FOCUS_FOCUS) return;
     	   bestFocalDist = -1.0f;
 
     	   itvlCount = 0;
     	   lens->setFocus(discreteDioptres[itvlCount]);
     	   itvlCount++;
-    	   nightCount = 0;
 
-    	   focusing = true;
     	   logDump();
        }
 
        /* High Freq Pass filter - averages a region of pixels and takes the difference
         * between the center of the pixel and the average
         */
-       int computeImageContrast(FCam::Image &image)
+       int computeImageContrast(FCam::Image &image, int rectIdx)
        {
     	   LOG("MYFOCUS compute contrast begin\n======================\n");
 
@@ -140,11 +159,11 @@ public:
     	   int totalValue = 0;
     	   int filterHalfSize = FILTER_SIZE / 2;
     	   int filterArea = FILTER_SIZE * FILTER_SIZE;
-    	   int highX = rect.x + rect.width - filterHalfSize;
-    	   int highY = rect.y + rect.height - filterHalfSize;
-    	   for(int x = rect.x + filterHalfSize; x < highX; x++)
+    	   int highX = rects[rectIdx].x + rects[rectIdx].width - filterHalfSize;
+    	   int highY = rects[rectIdx].y + rects[rectIdx].height - filterHalfSize;
+    	   for(int x = rects[rectIdx].x + filterHalfSize; x < highX; x++)
     	   {
-    		   for(int y = rect.y + filterHalfSize; y < highY; y++)
+    		   for(int y = rects[rectIdx].y + filterHalfSize; y < highY; y++)
     		   {
     			   sum = 0;
     			   for (int i = -filterHalfSize; i <= filterHalfSize; i++)
@@ -162,40 +181,6 @@ public:
     	   return totalValue;
        }
 
-       /* Similar to computeImage contrast, but operatores on the stored data for
-        * night mode
-        */
-       int computeNightContrast(FCam::Image &image){
-
-    	   saveImage(image);
-
-    	   LOG("MYFOCUS night contrast begin\n======================\n");
-
-    	   unsigned int sum = 0;
-    	   int totalValue = 0;
-    	   int filterHalfSize = FILTER_SIZE / 2;
-    	   int filterArea = FILTER_SIZE * FILTER_SIZE;
-    	   int highX = rect.width - filterHalfSize;
-    	   int highY = rect.height - filterHalfSize;
-    	   for(int x = filterHalfSize; x < highX; x++)
-    	   {
-    		   for(int y = filterHalfSize; y < highY; y++)
-    		   {
-    			   sum = 0;
-    			   for (int i = -filterHalfSize; i <= filterHalfSize; i++)
-    				   for (int j = -filterHalfSize; j <= filterHalfSize; j++)
-    					   sum += nightRegion[x+i][y+j];
-
-    			   sum /= filterArea;
-    			   int temp = nightRegion[x][y] - sum;
-
-    			   totalValue += temp * temp;
-    		   }
-    	   }
-    	   LOG("MYFOCUS total value: %d\n", totalValue);
-    	   LOG("MYFOCUS night contrast end\n======================\n");
-    	   return totalValue;
-       }
 
        void update(const FCam::Frame &f) {
     	   /* [CS478]
@@ -227,52 +212,41 @@ public:
 
     	   logDump();
 
-    	   if (night && nightCount < NUM_NIGHT_IMAGES - 1){
-    		   saveImage(image);
-    		   nightCount++;
-    		   return;
+    	   for (int i = 0; i < numActiveRects; i++)
+    	   {
+    		   int totalContrast = computeImageContrast(image, i);
+    		   if (rectsFC[i].bestContrast < totalContrast)
+    		   {
+    			   rectsFC[i].bestContrast = totalContrast;
+    			   rectsFC[i].bestFocus = itvlCount;
+    		   }
+    		   else if (itvlCount - 1 == 1)
+			   {
+		    	   //Catch outliers for the first checkpoint
+				   if((rectsFC[i].bestContrast * 0.6f) > totalContrast)
+					   rectsFC[i].bestContrast = totalContrast;
+			   }
     	   }
-
-    	   if (night && nightCount == NUM_NIGHT_IMAGES - 1){
-    		   sharpVals[itvlCount-1] = computeNightContrast(image);
-    		   clearNightRegion();
-    		   nightCount = 0;
-    	   }
-    	   else
-    		   sharpVals[itvlCount-1] = computeImageContrast(image);
 
     	   if (itvlCount != NUM_INTERVALS){
     		   lens->setFocus(discreteDioptres[itvlCount]);
     		   itvlCount++;
     		   return;
     	   }
-    	   int maxIdx = findMaxIdx();//TODO change this meaning
+    	   int medianFocus = findMedianIdx();//TODO change this meaning
     	   logDump();
 
-		   bestFocalDist = discreteDioptres[maxIdx];
+		   bestFocalDist = discreteDioptres[medianFocus];
 		   LOG("MYFOCUS The best focus setting: %f\n", bestFocalDist);
-		   focusing = false;
+		   state = AUTO_FOCUS_WAIT;
 		   lens->setFocus(bestFocalDist);
-       }
-
-       /************************** Debugging methods ***************************/
-       void logNightRegionDump()
-       {
-    	   LOG("MYFOCUS LOG NIGHT REG DUMP BEGIN\n======================\n");
-    	   for(int j = 10; j < 30; j++)
-    	   {
-    		   LOG("MYFOCUS LOG NIGHT val: %d\n", nightRegion[30][j]);
-    	   }
-    	   LOG("MYFOCUS LOG NIGHT REG DUMP END\n======================\n");
        }
 
        void logDump()
        {
     	   LOG("MYFOCUS LOG DUMP BEGIN\n======================\n");
     	   LOG("MYFOCUS interval count: %d\n", itvlCount);
-    	   LOG("MYFOCUS Focusing?: %d\n", focusing);
-    	   LOG("MYFOCUS night count: %d\n", nightCount);
-    	   LOG("MYFOCUS night?: %d\n", night);
+    	   LOG("MYFOCUS Focusing?: %d\n", state);
     	   LOG("MYFOCUS LOG DUMP END\n======================\n");
        }
 
@@ -296,6 +270,7 @@ public:
     	   LOG("MYFOCUS LOG RECT DUMP END\n======================\n");
        }
 
+       int state;
 
 private:
        FCam::Tegra::Lens* lens;
@@ -303,15 +278,15 @@ private:
        /* [CS478]
         * Declare any state variables you might need here.
         */
+       std::vector<FCam::Rect> rects;
+       std::vector<FocusContrast> rectsFC; //Stores the best contrast of the index up to date
+       int numActiveRects;
        int itvlCount;
+       int fdFrameCount;
        int sharpVals[NUM_INTERVALS];
        float nearFocus;
        float farFocus;
        float bestFocalDist;
-       bool focusing;
-       bool night;
-       int nightCount;
-       int nightRegion[RECT_EDGE_LEN][RECT_EDGE_LEN];
 };
 
 #endif

@@ -10,6 +10,9 @@
 #include <opencv2/features2d/features2d.hpp>
 #include <opencv2/objdetect/objdetect.hpp>
 
+#define IMAGE_WIDTH 			640
+#define IMAGE_HEIGHT 			480
+
 class MyFaceDetector {
 public:
 	MyFaceDetector(const char* filename) : classifier(filename) {
@@ -23,6 +26,10 @@ public:
 		 * http://opencv.willowgarage.com/documentation/cpp/objdetect_cascade_classification.html
 		 */
 		std::vector<cv::Rect> ret;
+		cv::Mat imageMat(IMAGE_HEIGHT, IMAGE_WIDTH, CV_8UC1, im(0,0));
+		classifier.detectMultiScale(imageMat, ret);
+		//cv::Rect rect(300, 300, 50, 50);
+		//ret.push_back(rect);
 		// TODO TODO TODO
 		// TODO TODO TODO
 		// TODO TODO TODO
