@@ -75,13 +75,7 @@ public final class CameraFragment extends Fragment implements OnClickListener, O
 		adapter = ArrayAdapter.createFromResource(activity, R.array.output_format_array, android.R.layout.simple_spinner_item);
 		adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
 		mOutputFormatSpinner.setAdapter(adapter);
-		mOutputFormatSpinner.setEnabled(false);
-
-		// Unpack the spinner for the view mode.
-		mViewerModeSpinner = (Spinner) mContentView.findViewById(R.id.spinner_viewer_mode);
-		adapter = ArrayAdapter.createFromResource(activity, R.array.viewer_mode_array, android.R.layout.simple_spinner_item);
-		adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-		mViewerModeSpinner.setAdapter(adapter);		
+		mOutputFormatSpinner.setEnabled(false);	
 		
 		// Unpack the spinner for the flash mode.
 		mFlashModeSpinner = (Spinner) mContentView.findViewById(R.id.spinner_flash_mode);
@@ -99,8 +93,12 @@ public final class CameraFragment extends Fragment implements OnClickListener, O
 		 * This piece of code should unpack the viewfinder mode spinner.
 		 * Don't forget to set its onItemSelectedListener appropriately.
 		 */		
-		// TODO TODO TODO
-		// TODO TODO TODO	
+		// Unpack the spinner for the view mode.
+		mViewerModeSpinner = (Spinner) mContentView.findViewById(R.id.spinner_viewer_mode);
+		mViewerModeSpinner.setOnItemSelectedListener(this);
+		adapter = ArrayAdapter.createFromResource(activity, R.array.viewer_mode_array, android.R.layout.simple_spinner_item);
+		adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+		mViewerModeSpinner.setAdapter(adapter);	
 		// TODO TODO TODO
 		
 		// Set the checkboxes for 3A algorithms.
@@ -199,17 +197,15 @@ public final class CameraFragment extends Fragment implements OnClickListener, O
 		 * viewfinder mode.
     	 */
     	// TODO TODO TODO 
-    	// TODO TODO TODO 
-    	// TODO TODO TODO 
-    	// TODO TODO TODO 
-		switch (mViewerModeSpinner.getSelectedItemPosition()) {
+		/*switch (mViewerModeSpinner.getSelectedItemPosition()) {
 		case 0: // normal mode
-
+			
 			break;
 		case 1: // zebra
 
 			break;				
-		}
+		}*/
+		mCameraView.setShaderProgramIndex(mViewerModeSpinner.getSelectedItemPosition());
     }
 
     public void onNothingSelected(AdapterView<?> parent) {

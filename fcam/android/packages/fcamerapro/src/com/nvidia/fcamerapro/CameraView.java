@@ -113,7 +113,6 @@ final class CameraViewRenderer implements GLSurfaceView.Renderer, FCamInterfaceE
 		// TODO TODO TODO 
 		// TODO TODO TODO 
 		// TODO TODO TODO 
-		
 		mShaderProgram = new int[2];
 	}
 
@@ -230,6 +229,7 @@ final class CameraViewRenderer implements GLSurfaceView.Renderer, FCamInterfaceE
 		 *  you to get control of the OpenGL thread again, which can be 
 		 *  tricky.
 		 */
+		mShaderProgram[1] = loadShaderProgram("zebra");
 		// TODO TODO TODO 
 		// TODO TODO TODO 
 		// TODO TODO TODO 

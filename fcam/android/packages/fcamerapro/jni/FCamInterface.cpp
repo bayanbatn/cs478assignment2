@@ -388,11 +388,6 @@ JNIEXPORT void JNICALL Java_com_nvidia_fcamerapro_FCamInterface_enqueueMessageFo
 	writer->push(is);
 
 }
-// TODO TODO TODO
-// TODO TODO TODO
-// TODO TODO TODO
-// TODO TODO TODO
-// TODO TODO TODO
 
 }
 
@@ -597,7 +592,7 @@ static void *FCamAppThread(void *ptr) {
 			case PARAM_AUTO_FOCUS_LOCAL_REG:
 				//LOG("MYFOCUS local focus switch\n");
 				autofocus.state = AUTO_FOCUS_FOCUS;
-				autofocus.setRect(taskData[0], taskData[1]);
+				autofocus.setRect(taskData[0] - RECT_EDGE_LEN / 2, taskData[1] - RECT_EDGE_LEN / 2);//hack TODO
 				autofocus.startSweep();
 				break;
 			case PARAM_AUTO_FOCUS_GLOBAL:
@@ -615,12 +610,9 @@ static void *FCamAppThread(void *ptr) {
 			case PARAM_AUTO_FOCUS_FACE:
 				LOG("MYFOCUS face focus switch\n");
 				autofocus.state = AUTO_FOCUS_FACE_DETECT;
+				autofocus.fdWait();
 				//autofocus.startFaceDetect();
 				break;
-				// TODO TODO TODO
-				// TODO TODO TODO
-				// TODO TODO TODO
-				// TODO TODO TODO
 				// TODO TODO TODO
 			default:
 				ERROR("TaskDispatch(): received unsupported task id (%i)!", taskId);
@@ -704,10 +696,6 @@ static void *FCamAppThread(void *ptr) {
 	     * appropriate.
 	     */
 	    // TODO TODO TODO
-	    // TODO TODO TODO
-	    // TODO TODO TODO
-	    // TODO TODO TODO
-	    // TODO TODO TODO
 
 	    /* [CS478] Assignment #1
 	     * You should process the incoming frame for autofocus, if necessary.
@@ -719,11 +707,6 @@ static void *FCamAppThread(void *ptr) {
 	    	autofocus.update(frame);
 	    	//LOG("MYFOCUS update called\n");
 	    }
-	    /*else if(autofocus.searchingFaces() && )
-	    {
-	    	//TODO: set rect
-	    	autofocus.startSweep();
-	    }*/
 	    if(currentShot->preview.autoFocus)
 	    {
 	    	currentShot->preview.evaluated.focus = (float) frame["lens.focus"];

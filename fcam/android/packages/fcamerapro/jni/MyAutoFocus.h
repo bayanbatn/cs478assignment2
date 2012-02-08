@@ -64,12 +64,19 @@ public:
 
        void fdWait()
        {
-    	   fdFrameCount++;
+    	   if (fdFrameCount == 0)
+    		   lens->setFocus(discreteDioptres[4]); //hardcoded values for now
+    	   else if (fdFrameCount == 1)
+    		   lens->setFocus(discreteDioptres[11]);
+    	   else if (fdFrameCount == 2)
+    		   lens->setFocus(discreteDioptres[18]);
+
     	   if (fdFrameCount == FD_MAX_FRAMES)
     	   {
     		   state = AUTO_FOCUS_WAIT;
     		   fdFrameCount = 0;
     	   }
+    	   fdFrameCount++;
        }
 
        void fdDone()
@@ -106,8 +113,8 @@ public:
        /* Sets focus region. For global, it's the entire frame */
        void setRect(int x, int y, int width = RECT_EDGE_LEN, int height = RECT_EDGE_LEN)
        {
-    	   rects[0].x = x;
-    	   rects[0].y = y;
+    	   rects[0].x = std::max(x, 0);
+    	   rects[0].y = std::max(y, 0);
     	   rects[0].width = width;
     	   rects[0].height = height;
 		   rectsFC[0].bestFocus = -1;
@@ -207,6 +214,7 @@ public:
     	   {
     		   LOG("MYFOCUS Trying lens focus request again\n");
     		   lens->setFocus(expectedFocus);
+    		   drawRectangles(f);
     		   return;
     	   }
 
@@ -231,6 +239,7 @@ public:
     	   if (itvlCount != NUM_INTERVALS){
     		   lens->setFocus(discreteDioptres[itvlCount]);
     		   itvlCount++;
+    		   drawRectangles(f);
     		   return;
     	   }
     	   int medianFocus = findMedianIdx();//TODO change this meaning
@@ -240,6 +249,22 @@ public:
 		   LOG("MYFOCUS The best focus setting: %f\n", bestFocalDist);
 		   state = AUTO_FOCUS_WAIT;
 		   lens->setFocus(bestFocalDist);
+		   drawRectangles(f);
+       }
+
+       void drawRectangles(const FCam::Frame &frame)
+       {
+	    	for (unsigned int i = 0; i < rects.size(); i++) {
+	    		FCam::Rect r = rects[i];
+	    		for (int x = 0; x < r.width; x++) {
+	    			frame.image()(r.x + x, r.y)[0] = 254u;
+	    			frame.image()(r.x + x, r.y + r.height)[0] = 254u;
+	    		}
+	    		for (int y = 0; y < r.height; y++) {
+					frame.image()(r.x, r.y + y)[0] = 254u;
+					frame.image()(r.x + r.width, r.y + y)[0] = 254u;
+	    		}
+	    	}
        }
 
        void logDump()
