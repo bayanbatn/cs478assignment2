@@ -21,7 +21,6 @@
 #define AUTO_FOCUS_FOCUS 		1
 #define AUTO_FOCUS_WAIT 		0
 //Max number of areas to focus
-#define MAX_FOCUS_RECTS			15
 
 typedef unsigned char uchar;
 
@@ -34,6 +33,12 @@ struct FocusContrast
 {
 	int bestContrast;
 	int bestFocus;
+
+	FocusContrast(int c, int f)
+	{
+		bestContrast = -1;
+		bestFocus = -1;
+	}
 };
 
 class MyAutoFocus : public FCam::Tegra::AutoFocus {
@@ -49,17 +54,6 @@ public:
     		   sharpVals[i] = 0.0f;
     	   state = AUTO_FOCUS_WAIT;
     	   fdFrameCount = 0;
-    	   //Init rect counts
-		   FocusContrast fc;
-		   fc.bestContrast = 0;
-		   fc.bestFocus = 0;
-    	   for (int i = 0; i < MAX_FOCUS_RECTS; i++)
-    	   {
-    		   rects.push_back(rect);
-			   rectsFC.push_back(fc);
-    	   }
-    	   numActiveRects = 0;
-
        }
 
        void fdWait()
@@ -73,30 +67,30 @@ public:
 
     	   if (fdFrameCount == FD_MAX_FRAMES)
     	   {
-    		   state = AUTO_FOCUS_WAIT;
     		   fdFrameCount = 0;
+    		   if (rects.size() == 0)
+    			   state = AUTO_FOCUS_WAIT; //no faces detected
+    		   else
+    		   {
+    			   state = AUTO_FOCUS_FOCUS;
+    			   startSweep();
+    		   }
     	   }
     	   fdFrameCount++;
-       }
-
-       void fdDone()
-       {
-    	   fdFrameCount = 0;
-    	   state = AUTO_FOCUS_FOCUS;
        }
 
        /* Meet the world's most inefficient implementation of median calculation.
         */
        int findMedianIdx()
        {
-    	   int medianPos = (numActiveRects + 1) / 2;
+    	   int medianPos = (rects.size() + 1) / 2;
 		   int maxFocus = 0;
 
     	   for (int i = 0; i < medianPos; i++)
     	   {
     		   maxFocus = 0;
     		   int maxIdx = 0;
-    		   for (int j = 0; j < numActiveRects; j++)
+    		   for (int j = 0; j < rects.size(); j++)
     		   {
     			   if (maxFocus <= rectsFC[j].bestFocus)
     			   {
@@ -113,28 +107,56 @@ public:
        /* Sets focus region. For global, it's the entire frame */
        void setRect(int x, int y, int width = RECT_EDGE_LEN, int height = RECT_EDGE_LEN)
        {
-    	   rects[0].x = std::max(x, 0);
-    	   rects[0].y = std::max(y, 0);
-    	   rects[0].width = width;
-    	   rects[0].height = height;
-		   rectsFC[0].bestFocus = -1;
-		   rectsFC[0].bestContrast = -1;
-    	   numActiveRects = 1;
-    	   //logRectDump();
+		   FCam::Rect rect = FCam::Rect(std::max(x, 0), std::max(y, 0), width, height);
+		   rects.push_back(rect);
+		   FocusContrast fc(-1, -1);
+		   rectsFC.push_back(fc);
        }
 
-       void setRects(std::vector<cv::Rect>& cv_rects)
+       bool trialsContains(cv::Rect& rect)
+       {
+    	   for (int i = 0; i < trials.size(); i++)
+    	   {
+    		   if(rect.x > trials[i].x - 25 && rect.x < trials[i].x + 25 && rect.y > trials[i].y - 25 && rect.y < trials[i].y + 25)
+    		   {
+    			   rects.push_back(trials[i]);
+    			   trials.erase(trials.begin() + i);
+    			   FocusContrast fc(-1, -1);
+    			   rectsFC.push_back(fc);
+    			   return true;
+    		   }
+    	   }
+    	   return false;
+       }
+
+       bool rectsContains(cv::Rect& rect)
+       {
+    	   for (int i = 0; i < rects.size(); i++)
+    	   {
+    		   if(rect.x > rects[i].x - 25 && rect.x < rects[i].x + 25 && rect.y > rects[i].y - 25 && rect.y < rects[i].y + 25)
+    		   {
+    			   return true;
+    		   }
+    	   }
+    	   return false;
+       }
+
+
+
+       void setRects(std::vector<cv::Rect>& cv_rects)//TODO
        {
     	   for (int i = 0; i < cv_rects.size(); i++)
     	   {
-    		   rects[i].x = cv_rects[i].x;
-    		   rects[i].y = cv_rects[i].y;
-    		   rects[i].width = cv_rects[i].width;
-    		   rects[i].height = cv_rects[i].height;
-    		   rectsFC[i].bestFocus = -1;
-    		   rectsFC[i].bestContrast = -1;
+    		   if (trialsContains(cv_rects[i]))
+    			   continue;
+    		   else if(rectsContains(cv_rects[i]))
+    			   continue;
+    		   else
+    		   {
+    			   FCam::Rect rect = FCam::Rect(cv_rects[i].x, cv_rects[i].y, cv_rects[i].width, cv_rects[i].height);
+    			   trials.push_back(rect);
+    		   }
     	   }
-    	   numActiveRects = cv_rects.size();
        }
 
        /* Beging focusing */
@@ -220,7 +242,7 @@ public:
 
     	   logDump();
 
-    	   for (int i = 0; i < numActiveRects; i++)
+    	   for (int i = 0; i < rects.size(); i++)
     	   {
     		   int totalContrast = computeImageContrast(image, i);
     		   if (rectsFC[i].bestContrast < totalContrast)
@@ -231,8 +253,11 @@ public:
     		   else if (itvlCount - 1 == 1)
 			   {
 		    	   //Catch outliers for the first checkpoint
-				   if((rectsFC[i].bestContrast * 0.6f) > totalContrast)
-					   rectsFC[i].bestContrast = totalContrast;
+				   if((rectsFC[i].bestContrast * 0.6f) > totalContrast && rectsFC[i].bestFocus == 0)
+				   {
+					   rectsFC[i].bestContrast = -1;
+					   rectsFC[i].bestFocus = -1;
+				   }
 			   }
     	   }
 
@@ -242,7 +267,7 @@ public:
     		   drawRectangles(f);
     		   return;
     	   }
-    	   int medianFocus = findMedianIdx();//TODO change this meaning
+    	   int medianFocus = findMedianIdx();
     	   logDump();
 
 		   bestFocalDist = discreteDioptres[medianFocus];
@@ -250,6 +275,11 @@ public:
 		   state = AUTO_FOCUS_WAIT;
 		   lens->setFocus(bestFocalDist);
 		   drawRectangles(f);
+
+    	   //Rect cleans after drawing
+    	   rects.clear();
+    	   trials.clear();
+    	   rectsFC.clear();
        }
 
        void drawRectangles(const FCam::Frame &frame)
@@ -304,8 +334,8 @@ private:
         * Declare any state variables you might need here.
         */
        std::vector<FCam::Rect> rects;
+       std::vector<FCam::Rect> trials;
        std::vector<FocusContrast> rectsFC; //Stores the best contrast of the index up to date
-       int numActiveRects;
        int itvlCount;
        int fdFrameCount;
        int sharpVals[NUM_INTERVALS];

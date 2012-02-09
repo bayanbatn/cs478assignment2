@@ -674,14 +674,10 @@ static void *FCamAppThread(void *ptr) {
 					frame.image()(r.x + r.width, r.y + y)[0] = 254u;
 	    		}
 	    	}
-	    	if (facesFound.size() == 0)
-	    		autofocus.fdWait();
-	    	else
-	    	{
-	    		autofocus.fdDone();
+	    	if (facesFound.size() != 0)
 	    		autofocus.setRects(facesFound);
-	    		autofocus.startSweep();
-	    	}
+
+	    	autofocus.fdWait();
 	    }
 	    /* [CS478] Assignment #2
 	     * Above, facesFound contains the list of detected faces, for the given frame.
