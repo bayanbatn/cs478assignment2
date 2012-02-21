@@ -8,6 +8,7 @@
 #include <vector>
 #include <opencv2/core/core.hpp>
 
+//Number of discrete focal lengths we sweep through
 #define NUM_INTERVALS 			23
 #define RECT_EDGE_LEN 			100
 #define IMAGE_WIDTH 			640
@@ -24,11 +25,15 @@
 
 typedef unsigned char uchar;
 
-
+/* Discrete focal length values that we sweep through */
 static const float discreteDioptres[] = {0.2f, 0.25f, 0.33f, 0.5f, 1.0f, 1.11f, 1.25f, 1.42f, 1.66f, 2.0f,
 										 2.5f, 3.33f, 5.0f, 5.26f, 5.56f, 5.88f, 6.25f, 6.67f, 7.14f, 7.69f,
 										 8.33f, 9.09f, 10.0f};
 
+/* Struct for storing the best focus value
+ * and maximal contrast for a given region (rect)
+ * in the image.
+ */
 struct FocusContrast
 {
 	int bestContrast;
@@ -50,14 +55,18 @@ public:
     	   /* [CS478]
     	    * Do any initialization you need.
     	    */
-    	   for (int i = 0; i < NUM_INTERVALS; i++)
-    		   sharpVals[i] = 0.0f;
     	   state = AUTO_FOCUS_WAIT;
     	   fdFrameCount = 0;
        }
 
+       /* For face detection phase
+        * Waits through 3 frames, waiting for face detection.
+        * Each frame is at a different focal distance, in case a
+        * blur prevents face detection at a single focal distance.
+        */
        void fdWait()
        {
+    	   //Set focal distances for each frame
     	   if (fdFrameCount == 0)
     		   lens->setFocus(discreteDioptres[4]); //hardcoded values for now
     	   else if (fdFrameCount == 1)
@@ -65,6 +74,7 @@ public:
     	   else if (fdFrameCount == 2)
     		   lens->setFocus(discreteDioptres[18]);
 
+    	   // If frame count is up
     	   if (fdFrameCount == FD_MAX_FRAMES)
     	   {
     		   fdFrameCount = 0;
@@ -73,13 +83,14 @@ public:
     		   else
     		   {
     			   state = AUTO_FOCUS_FOCUS;
-    			   startSweep();
+    			   startSweep(); //faces detected and confirmed
     		   }
     	   }
     	   fdFrameCount++;
        }
 
        /* Meet the world's most inefficient implementation of median calculation.
+        * Picks a median focus from the best options for each region.
         */
        int findMedianIdx()
        {
@@ -117,7 +128,8 @@ public:
        {
     	   for (int i = 0; i < trials.size(); i++)
     	   {
-    		   if(rect.x > trials[i].x - 25 && rect.x < trials[i].x + 25 && rect.y > trials[i].y - 25 && rect.y < trials[i].y + 25)
+    		   if(rect.x > trials[i].x - 25 && rect.x < trials[i].x + 25 &&
+    		      rect.y > trials[i].y - 25 && rect.y < trials[i].y + 25)
     		   {
     			   rects.push_back(trials[i]);
     			   trials.erase(trials.begin() + i);
@@ -133,14 +145,14 @@ public:
        {
     	   for (int i = 0; i < rects.size(); i++)
     	   {
-    		   if(rect.x > rects[i].x - 25 && rect.x < rects[i].x + 25 && rect.y > rects[i].y - 25 && rect.y < rects[i].y + 25)
+    		   if(rect.x > rects[i].x - 25 && rect.x < rects[i].x + 25 &&
+    		      rect.y > rects[i].y - 25 && rect.y < rects[i].y + 25)
     		   {
     			   return true;
     		   }
     	   }
     	   return false;
        }
-
 
 
        void setRects(std::vector<cv::Rect>& cv_rects)//TODO
@@ -159,26 +171,18 @@ public:
     	   }
        }
 
-       /* Beging focusing */
+       /* Beging focus phase */
        void startSweep() {
     	   if (!lens) return;
-    	   /* [CS478]
-    	    * This method should initiate your autofocus algorithm.
-    	    * Before you do that, do basic checks, e.g. is the autofocus
-    	    * already engaged?
-    	    */
     	   if (state != AUTO_FOCUS_FOCUS) return;
-    	   bestFocalDist = -1.0f;
 
     	   itvlCount = 0;
     	   lens->setFocus(discreteDioptres[itvlCount]);
     	   itvlCount++;
-
-    	   logDump();
        }
 
        /* High Freq Pass filter - averages a region of pixels and takes the difference
-        * between the center of the pixel and the average
+        * between the center of the pixel and the average. Not efficiieeeeent!!
         */
        int computeImageContrast(FCam::Image &image, int rectIdx)
        {
@@ -210,19 +214,16 @@ public:
     	   return totalValue;
        }
 
-
+	   /* [CS478]
+	    * This method is supposed to be called in order to inform
+	    * the autofocus engine of a new viewfinder frame.
+	    * You probably want to compute how sharp it is, and possibly
+	    * use the information to plan where to position the lens next.
+	    */
        void update(const FCam::Frame &f) {
-    	   /* [CS478]
-    	    * This method is supposed to be called in order to inform
-    	    * the autofocus engine of a new viewfinder frame.
-    	    * You probably want to compute how sharp it is, and possibly
-    	    * use the information to plan where to position the lens next.
-    	    */
-    	   /* Extract frame and do stuff */
 
     	   FCam::Image image = f.image();
     	   if (!image.valid()){
-    		   sharpVals[itvlCount-1] = -1;
     		   LOG("MYFOCUS Invalid image\n");
     	   }
 
@@ -239,8 +240,6 @@ public:
     		   drawRectangles(f);
     		   return;
     	   }
-
-    	   logDump();
 
     	   for (int i = 0; i < rects.size(); i++)
     	   {
@@ -267,10 +266,9 @@ public:
     		   drawRectangles(f);
     		   return;
     	   }
-    	   int medianFocus = findMedianIdx();
-    	   logDump();
 
-		   bestFocalDist = discreteDioptres[medianFocus];
+    	   int medianFocus = findMedianIdx();
+		   float bestFocalDist = discreteDioptres[medianFocus];
 		   LOG("MYFOCUS The best focus setting: %f\n", bestFocalDist);
 		   state = AUTO_FOCUS_WAIT;
 		   lens->setFocus(bestFocalDist);
@@ -297,24 +295,6 @@ public:
 	    	}
        }
 
-       void logDump()
-       {
-    	   LOG("MYFOCUS LOG DUMP BEGIN\n======================\n");
-    	   LOG("MYFOCUS interval count: %d\n", itvlCount);
-    	   LOG("MYFOCUS Focusing?: %d\n", state);
-    	   LOG("MYFOCUS LOG DUMP END\n======================\n");
-       }
-
-       void logArrayDump()
-       {
-    	   LOG("MYFOCUS LOG ARRAY DUMP BEGIN\n======================\n");
-    	   for (int i = 0; i < NUM_INTERVALS; i++)
-    	   {
-    		   LOG("MYFOCUS array index: %d, val: %d\n", i, sharpVals[i]);
-    	   }
-    	   LOG("MYFOCUS LOG ARRAY DUMP END\n======================\n");
-       }
-
        void logRectDump()
        {
     	   LOG("MYFOCUS LOG RECT DUMP BEGIN\n======================\n");
@@ -325,6 +305,7 @@ public:
     	   LOG("MYFOCUS LOG RECT DUMP END\n======================\n");
        }
 
+       // State - ranges from face detection (2), focus sweep (1), and waiting (0)
        int state;
 
 private:
@@ -333,15 +314,22 @@ private:
        /* [CS478]
         * Declare any state variables you might need here.
         */
+
+       //README README README
+       //README README README
+       //README README README
+
+       //Regions where we're keeping track of the contrast
        std::vector<FCam::Rect> rects;
+       //For face recognition - keep track of regions where faces are detected
+       //only keep regions that are detected twice out of three times
        std::vector<FCam::Rect> trials;
-       std::vector<FocusContrast> rectsFC; //Stores the best contrast of the index up to date
+       //Stores the best contrast value and best focal length for a given reach - shares indexes with rects
+       std::vector<FocusContrast> rectsFC;
+       //interval count - counts from 0 to 22, where each index is associated with a focal length value
        int itvlCount;
+       //for face detection phase - counts from 0 to 2. For each frame, store the regions where faces were detected
        int fdFrameCount;
-       int sharpVals[NUM_INTERVALS];
-       float nearFocus;
-       float farFocus;
-       float bestFocalDist;
 };
 
 #endif
